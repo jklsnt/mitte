@@ -1,6 +1,8 @@
 use std::net::{UdpSocket, SocketAddr, SocketAddrV4, Ipv4Addr};
 use stunclient::StunClient;
 
+fn p<T:std::fmt::Debug>(test:T) { println!("{:?}", test) }
+
 fn main() {
     // Define the STUN server
     // (this is the address of stun.gmx.net:3478)
