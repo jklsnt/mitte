@@ -5,7 +5,6 @@ fn main() {
     // Define the STUN server
     // (this is the address of stun.xten.com:3478)
     let socket = SocketAddrV4::new(Ipv4Addr::new(216,93,246,18), 3478);
-
     // Define the STUN Client
     let stunclient = StunClient::new(SocketAddr::V4(socket));
 
