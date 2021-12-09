@@ -4,12 +4,12 @@ mod agent;
 pub use agent::*;
 
 fn main() {
-    let desc = AgentDescription::new("0.0.0.0:0".parse().unwrap(), "aaaaaaaaaaaaaa")
+    let desc = AgentDescription::new("192.168.1.154:83".parse().unwrap(), "chicken pie")
                                 .expect("error! name is probably too long");
 
     let serialized = desc.serialize();
 
-    println!("Length: {}\nObject: {:?}", serialized.len(), AgentDescription::deserialize(&serialized));
+    println!("Length: {}\nObject: {:?}\nData: {:?}", serialized.len(), AgentDescription::deserialize(&serialized), serialized);
 
 }
 

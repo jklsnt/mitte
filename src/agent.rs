@@ -25,15 +25,27 @@ pub struct AgentDescription {
 }
 
 impl AgentDescription {
+
+    /// Creates an agent. The agent's name must be smaller than or equal to 20 chars.
+    ///
+    /// # Arguments
+    /// - `addr:SocketAddrV4`: the Socket address which describes the location of agent
+    /// - `name:&str`: the name of the agent. Must be <= 20 chars
+    ///
+    /// # Returns
+    /// `Result<Self, MitteError>`: potentially an instance of AgentDescription 
     pub fn new(addr:SocketAddrV4, name: &str) -> Result<Self, MitteError> {
         if name.len() > 20 {
             return Err(MitteError::DescriptionFormatError(String::from("name too long")));
         }
 
         return Ok(AgentDescription {addr, name: String::from(name)});
-
     }
 
+    /// Serialize the present `AgentDescription` object. 
+    ///
+    /// # Returns
+    /// `Vec<u8>`: a vector of length 35 (if length incorrect, its padded)
     pub fn serialize(&self) -> Vec<u8> {
         let mut serialized = bincode::serialize(self).unwrap();
 
@@ -44,6 +56,12 @@ impl AgentDescription {
         return serialized;
     }
 
+    /// Deserialize a bincode vector into an AgentDescription Object
+    ///
+    /// TODO actually verify what we get is an AgentDescription
+    ///
+    /// # Returns
+    /// `AgentDescription`: the deserialized object
     pub fn deserialize(v:&[u8]) -> Self {
         bincode::deserialize(v).unwrap()
     }
