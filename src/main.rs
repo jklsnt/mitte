@@ -4,11 +4,12 @@ mod agent;
 pub use agent::*;
 
 fn main() {
-    let desc = AgentDescription::new("0.0.0.0:8393", "TestAgent")
+    let desc = AgentDescription::new("0.0.0.0:8301", "TestAgent")
                                 .expect("error! name is probably too long");
 
-    // let mut ag = Agent::new(desc);
-    // ag.handshake(, target: &AgentDescription)
+    let ag = Agent::new(desc);
+
+    println!("{:?}", ag);
 }
 
 // let serialized = desc.serialize();

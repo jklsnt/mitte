@@ -6,7 +6,6 @@ use std::net::{UdpSocket, SocketAddrV4};
 use serde::{Serialize, Deserialize};
 use bincode;
 use std::time::Duration;
-use std::error::Error;
 
 /// A description for a given agent, including its name and address
 ///
@@ -89,7 +88,7 @@ impl Agent {
         }
     }
 
-    pub fn handshake(&self, target: &AgentDescription) -> Result<(), Box<dyn Error>> {
+    pub fn handshake(&self, target: &AgentDescription) -> Result<(), MitteError> {
         // The handshake subrutine is a very long subroutine therefore, we shall attempt to
         // illustrate parts of it.
 
@@ -97,7 +96,6 @@ impl Agent {
         // long. We don't want to wait too long for our peer to respond, and we will give up
         // if things take too long. We also save the original timeouts to write them back.
         let second = Duration::new(1,0);
-
         let old_read_timeout = self.socket.read_timeout().unwrap();
         let old_write_timeout = self.socket.write_timeout().unwrap();
 
@@ -105,16 +103,24 @@ impl Agent {
         self.socket.set_write_timeout(Some(second)).unwrap();
 
         // We first attempt to connect to our target peer
-        self.socket.connect(target.addr)?; 
-        
+        match self.socket.connect(target.addr) {
+            Ok(_) => (),
+            Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
+        }
+
         // We then send our mating message inviting to bind, telling nothing about ourselves
         // it looks very simple: 0 0 0 0 0 0 0, just 8 zeros
-        self.socket.send(&[0;8])?; 
+        self.socket.send(&[0;8]).unwrap(); 
 
         // We now hope that we get an acknowledge message back, that would be good so we could
-        // introduce ourselves. The ack nowledge is eitght eights: 8 8 8 8 8 8 8 8
+        // introduce ourselves. The ack mesage is eight eights: 8 8 8 8 8 8 8 8
         let mut buf = [0;8]; // initialize a buffer of 8 zeros
-        self.socket.recv(&mut buf)?; 
+        self.socket.recv(&mut buf).unwrap(); 
+
+        // Check whether or not we actually got eight eights back
+        if buf != [8;8] {
+            return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
+        }
         
         // We now set the original timeouts back
         self.socket.set_read_timeout(old_read_timeout).unwrap();
