@@ -2,6 +2,8 @@
 
 #[derive(Debug)]
 pub enum MitteError  {
-    HandshakeError(String),
-    DescriptionFormatError(String)
+    DescriptionFormatError(String),
+
+    AgentCreationError(String),
+    HandshakeError(String)
 }
