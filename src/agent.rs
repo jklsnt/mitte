@@ -5,6 +5,8 @@ use super::error::*;
 use std::net::{UdpSocket, SocketAddrV4};
 use serde::{Serialize, Deserialize};
 use bincode;
+use std::time::Duration;
+use std::error::Error;
 
 /// A description for a given agent, including its name and address
 ///
@@ -87,18 +89,36 @@ impl Agent {
         }
     }
 
-    pub fn handshake(&mut self, socket: &UdpSocket, target: &AgentDescription) -> Result<(), MitteError> {
-        // Oh boy oh boy this maybe a very long subroutine
-        // therefore, we shall attempt to illustrate parst of it.
+    pub fn handshake(&self, target: &AgentDescription) -> Result<(), Box<dyn Error>> {
+        // The handshake subrutine is a very long subroutine therefore, we shall attempt to
+        // illustrate parts of it.
+
+        // Before we begin, we set the block time for read and write operations to one second
+        // long. We don't want to wait too long for our peer to respond, and we will give up
+        // if things take too long. We also save the original timeouts to write them back.
+        let second = Duration::new(1,0);
+
+        let old_read_timeout = self.socket.read_timeout().unwrap();
+        let old_write_timeout = self.socket.write_timeout().unwrap();
+
+        self.socket.set_read_timeout(Some(second)).unwrap();
+        self.socket.set_write_timeout(Some(second)).unwrap();
 
         // We first attempt to connect to our target peer
-        match socket.connect(target.addr) {
-            Ok(_) => (), // if we could, move on. If not, return a Err.
-            Err(_) => {return Err(MitteError::HandshakeError(String::from("peer socket disconnected")));}
-        }
+        self.socket.connect(target.addr)?; 
         
-        let message_buffer:[u8;5] = [1,3,3,1,2];
-        socket.send(&message_buffer).unwrap();
+        // We then send our mating message inviting to bind, telling nothing about ourselves
+        // it looks very simple: 0 0 0 0 0 0 0, just 8 zeros
+        self.socket.send(&[0;8])?; 
+
+        // We now hope that we get an acknowledge message back, that would be good so we could
+        // introduce ourselves. The ack nowledge is eitght eights: 8 8 8 8 8 8 8 8
+        let mut buf = [0;8]; // initialize a buffer of 8 zeros
+        self.socket.recv(&mut buf)?; 
+        
+        // We now set the original timeouts back
+        self.socket.set_read_timeout(old_read_timeout).unwrap();
+        self.socket.set_write_timeout(old_write_timeout).unwrap();
 
         return Ok(());
     }
