@@ -2,10 +2,16 @@
 //! sending and recieving partners
 
 use super::error::*;
-use std::net::{UdpSocket, SocketAddrV4};
-use serde::{Serialize, Deserialize};
-use bincode;
+
 use std::time::Duration;
+
+use bincode;
+use serde::{Serialize, Deserialize};
+
+use rand::rngs::OsRng;
+use std::net::{UdpSocket, SocketAddrV4};
+use rsa::{RsaPublicKey, RsaPrivateKey};
+
 
 /// A description for a given agent, including its name and address
 ///
@@ -22,7 +28,8 @@ use std::time::Duration;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AgentDescription {
     addr: SocketAddrV4,
-    name: String
+    name: String,
+    key: RsaPublicKey
 }
 
 impl AgentDescription {
@@ -32,17 +39,25 @@ impl AgentDescription {
     /// # Arguments
     /// - `addr:&str`: the IPv4 Socket address which describes the location of agent
     /// - `name:&str`: the name of the agent. Must be <= 20 chars
+    /// - `u8:&[u8]`: slice of U8 representing a bincode serialized `RsaPublcKey`
     ///
     /// # Returns
     /// `Result<Self, MitteError>`: potentially an instance of AgentDescription 
-    pub fn new(addr:&str, name: &str) -> Result<Self, MitteError> {
+    pub fn new(addr:&str, name: &str, key: &[u8]) -> Result<Self, MitteError> {
         if name.len() > 20 {
             return Err(MitteError::DescriptionFormatError(String::from("name too long")));
         }
 
+        let key:RsaPublicKey = match bincode::deserialize(key) { Ok(a) => a,
+                                                                 Err(_) => {
+                                                                     return Err(MitteError::DescriptionFormatError(
+                                                                         String::from("cannot parse public key")
+                                                                     ))
+                                                                 }};
+
         let address = addr.parse();
         match address {
-            Ok(a) => Ok(AgentDescription {addr: a, name: String::from(name)}),
+            Ok(a) => Ok(AgentDescription {addr: a, name: String::from(name), key}),
             Err(_) => Err(MitteError::DescriptionFormatError(String::from("cannot parse socket address")))
         }
     }
@@ -76,14 +91,24 @@ impl AgentDescription {
 pub struct Agent {
     pub profile: AgentDescription,
     peers: Vec<AgentDescription>,
-    socket: UdpSocket
+    socket: UdpSocket,
+    secret: RsaPrivateKey
 }
 
 impl Agent {
-    pub fn new(profile: AgentDescription) -> Result<Self, MitteError> {
+    pub fn new(addr:&str, name: &str) -> Result<Self, MitteError> {
+        let priv_key = match RsaPrivateKey::new(&mut OsRng, 2048) { Ok(k)=>{k},
+                                                                    Err(_) => {
+                                                                        return Err(MitteError::AgentCreationError(
+                                                                            String::from("cannot create key")))
+                                                                    }};
+
+        let pub_key_serialized = bincode::serialize(&RsaPublicKey::from(&priv_key)).unwrap();
+        let profile = AgentDescription::new(addr, name, &pub_key_serialized)?;
+
         let socket = UdpSocket::bind(profile.addr);
         match socket {
-            Ok(s) => Ok(Agent { profile, peers: vec![], socket:s}),
+            Ok(s) => Ok(Agent { profile, peers: vec![], socket:s, secret:priv_key}),
             Err(_) => Err(MitteError::AgentCreationError(String::from("cannot bind to socket")))
         }
     }
@@ -121,6 +146,9 @@ impl Agent {
         if buf != [8;8] {
             return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
         }
+
+        // Ok, its time to tell our peer a little bit about ourselves
+        // a
         
         // We now set the original timeouts back
         self.socket.set_read_timeout(old_read_timeout).unwrap();
