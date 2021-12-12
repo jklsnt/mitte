@@ -9,9 +9,10 @@ pub use agent::*;
 mod debug;
 
 fn main() {
-    let agent = Agent::new("0.0.0.0:9521", "whato aa o asonethua").unwrap();
-    let serialized = agent.profile.serialize();
-    println!("{:?}", serialized);
+    // let agent = Agent::new("0.0.0.0:9521", "whato aa o asonethua").unwrap();
+    // let serialized = agent.profile.serialize();
+    // println!("{:?}", serialized);
+
 
     // let priv_key:RsaPrivateKey = bincode::deserialize(&debug::_KEY_PRIV).unwrap();
     // let pub_key:RsaPublicKey = bincode::deserialize(&debug::_KEY_PUB).unwrap();

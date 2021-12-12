@@ -201,6 +201,22 @@ impl Agent {
             let desc = self.profile.serialize();
             socket.send(&desc).unwrap(); 
 
+            // We now try to recieve four things, which has the shape of
+            // 1 x y 1. This is the reciept acknowledgement. x, y are encoded
+            // as follows
+            //
+            // 1. x - 1 (accept) 0 (reject)
+            // 2. y - 1 (new connection) 0 (previous connection)
+            let mut buf = [0;4]; // initialize a buffer of 4 zeros 
+            socket.recv(&mut buf).unwrap();
+
+            // We first check that the ack package is correctly 1-padded
+            if !(buf[0] == buf[3] && buf[3] == 1) {
+                return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
+            }
+
+            // We then check that the ack has not been rejected 
+
             // We now set the original timeouts back
             socket.set_read_timeout(old_read_timeout).unwrap();
             socket.set_write_timeout(old_write_timeout).unwrap();
