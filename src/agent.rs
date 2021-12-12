@@ -163,7 +163,7 @@ impl Agent {
         // We begin by either getting or rebinding the socket if the socket was
         // no longer bound
         self.autobind()?;
-        
+
         // Ensure that the socket is bound.
         if let Some(socket) = &self.socket {
             // Before we begin, we set the block time for read and write operations to one second
@@ -226,5 +226,76 @@ impl Agent {
             return Err(MitteError::HandshakeError(String::from("socket unbound")));
         }
     }
+
+    pub fn listen(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
+        self.autobind()?;
+        if let Some(socket) = &self.socket {
+
+            let second = Duration::new(1,0);
+            let old_read_timeout = socket.read_timeout().unwrap();
+            let old_write_timeout = socket.write_timeout().unwrap();
+
+            socket.set_read_timeout(Some(second)).unwrap();
+            socket.set_write_timeout(Some(second)).unwrap();
+
+            //match socket.connect(target.addr.unwrap()) {
+            //    Ok(_) => (),
+            //    Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
+            //}
+
+            let mut buf = [1;8]; // initialize a buffer of 8 zeros
+            socket.recv_from(&mut buf).unwrap();
+
+            if buf != [0;8] {
+                return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
+            }
+
+            match socket.connect(target.addr.unwrap()) {
+                Ok(_) => (),
+                Err(_) => { return Err(MitteError::HandshakeError(String::from("cannot listen"))); }
+            }
+
+            socket.send(&[0;8]).unwrap();
+
+            let mut peer_desc = [0;320];
+            socket.recv(&mut peer_desc).unwrap();
+            let peer = AgentDescription::deserialize(&peer_desc);
+
+            let mut is_new = 1;
+            if self.peers.contains(&peer) {
+                is_new = 0;
+            }
+
+            let mut buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
+            socket.send(&buf).unwrap();
+
+            return Ok(());
+
+        } else {
+            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+        }
+
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
