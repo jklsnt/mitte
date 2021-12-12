@@ -197,7 +197,10 @@ impl Agent {
             }
 
             // Ok, its time to tell our peer a little bit about ourselves
-            
+            // i.e. send them our agent description
+            let desc = self.profile.serialize();
+            socket.send(&desc).unwrap(); 
+
             // We now set the original timeouts back
             socket.set_read_timeout(old_read_timeout).unwrap();
             socket.set_write_timeout(old_write_timeout).unwrap();
