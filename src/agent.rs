@@ -27,9 +27,9 @@ use rsa::{RsaPublicKey, RsaPrivateKey};
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AgentDescription {
-    addr: SocketAddrV4,
-    name: String,
-    key: RsaPublicKey
+    addr: Option<SocketAddrV4>,
+    key: RsaPublicKey,
+    pub name: String,
 }
 
 impl AgentDescription {
@@ -48,16 +48,17 @@ impl AgentDescription {
             return Err(MitteError::DescriptionFormatError(String::from("name too long")));
         }
 
-        let key:RsaPublicKey = match bincode::deserialize(key) { Ok(a) => a,
-                                                                 Err(_) => {
-                                                                     return Err(MitteError::DescriptionFormatError(
-                                                                         String::from("cannot parse public key")
-                                                                     ))
-                                                                 }};
+        let key:RsaPublicKey = match bincode::deserialize(key)
+        { Ok(a) => a,
+          Err(_) => {
+              return Err(MitteError::DescriptionFormatError(
+                  String::from("cannot parse public key")
+              ))
+          }};
 
         let address = addr.parse();
         match address {
-            Ok(a) => Ok(AgentDescription {addr: a, name: String::from(name), key}),
+            Ok(a) => Ok(AgentDescription {addr: Some(a), name: String::from(name), key}),
             Err(_) => Err(MitteError::DescriptionFormatError(String::from("cannot parse socket address")))
         }
     }
@@ -69,7 +70,7 @@ impl AgentDescription {
     pub fn serialize(&self) -> Vec<u8> {
         let mut serialized = bincode::serialize(self).unwrap();
 
-        while serialized.len() < 35 {
+        while serialized.len() < 320 {
             serialized.push(0);
         }
 
@@ -85,76 +86,126 @@ impl AgentDescription {
     pub fn deserialize(v:&[u8]) -> Self {
         bincode::deserialize(v).unwrap()
     }
+
+    /// Compares two agents and ensures that they are "the same" 
+    ///
+    /// similarity is determined by same name and same key
+    ///
+    /// # Returns
+    /// `bool`: whether agents are the same
+    pub fn is_same(&self, other:Self) -> bool {
+        self.key == other.key && self.name == other.name
+    }
 }
 
-#[derive(Debug)]
+impl PartialEq for AgentDescription {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key &&
+            self.name == other.name &&
+            self.addr == other.addr
+    }
+}
+
+impl Eq for AgentDescription {}
+
+// Don't quite know, but the initializer has to
+// be a function
+fn noneifier() -> Option<UdpSocket> { None }
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Agent {
     pub profile: AgentDescription,
     peers: Vec<AgentDescription>,
-    socket: UdpSocket,
-    secret: RsaPrivateKey
+    secret: RsaPrivateKey,
+
+    #[serde(skip, default="noneifier")] 
+    socket: Option<UdpSocket>,
 }
 
 impl Agent {
     pub fn new(addr:&str, name: &str) -> Result<Self, MitteError> {
-        let priv_key = match RsaPrivateKey::new(&mut OsRng, 2048) { Ok(k)=>{k},
-                                                                    Err(_) => {
-                                                                        return Err(MitteError::AgentCreationError(
-                                                                            String::from("cannot create key")))
-                                                                    }};
+        let priv_key = if let Ok(k) = RsaPrivateKey::new(&mut OsRng, 2048) { k }
+        else {return Err(MitteError::AgentCreationError(String::from("cannot create key")))};
 
         let pub_key_serialized = bincode::serialize(&RsaPublicKey::from(&priv_key)).unwrap();
         let profile = AgentDescription::new(addr, name, &pub_key_serialized)?;
 
-        let socket = UdpSocket::bind(profile.addr);
+        let socket = UdpSocket::bind(profile.addr.expect("fatal: agent-created desc. does not have address"));
         match socket {
-            Ok(s) => Ok(Agent { profile, peers: vec![], socket:s, secret:priv_key}),
+            Ok(s) => Ok(Agent { profile, peers: vec![], socket:Some(s), secret:priv_key}),
             Err(_) => Err(MitteError::AgentCreationError(String::from("cannot bind to socket")))
         }
     }
 
-    pub fn handshake(&self, target: &AgentDescription) -> Result<(), MitteError> {
+    /// Automatically bind to the descripted UDP socket if not bound, otherwise do nothing
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: nothing, or a failure
+    fn autobind(&mut self) -> Result<(), MitteError> {
+        if let None = self.socket {
+            let socket_option = UdpSocket::bind(self.profile.addr.unwrap());
+
+            match socket_option {
+                Ok(s) => {
+                    Ok(self.socket = Some(s))
+                },
+                Err(_) => {
+                    Err(MitteError::HandshakeError(String::from("cannot bind to socket")))
+                }
+            }
+        } else { Ok(()) }
+    }
+
+    pub fn handshake(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
         // The handshake subrutine is a very long subroutine therefore, we shall attempt to
         // illustrate parts of it.
 
-        // Before we begin, we set the block time for read and write operations to one second
-        // long. We don't want to wait too long for our peer to respond, and we will give up
-        // if things take too long. We also save the original timeouts to write them back.
-        let second = Duration::new(1,0);
-        let old_read_timeout = self.socket.read_timeout().unwrap();
-        let old_write_timeout = self.socket.write_timeout().unwrap();
-
-        self.socket.set_read_timeout(Some(second)).unwrap();
-        self.socket.set_write_timeout(Some(second)).unwrap();
-
-        // We first attempt to connect to our target peer
-        match self.socket.connect(target.addr) {
-            Ok(_) => (),
-            Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
-        }
-
-        // We then send our mating message inviting to bind, telling nothing about ourselves
-        // it looks very simple: 0 0 0 0 0 0 0, just 8 zeros
-        self.socket.send(&[0;8]).unwrap(); 
-
-        // We now hope that we get an acknowledge message back, that would be good so we could
-        // introduce ourselves. The ack mesage is eight eights: 8 8 8 8 8 8 8 8
-        let mut buf = [0;8]; // initialize a buffer of 8 zeros
-        self.socket.recv(&mut buf).unwrap(); 
-
-        // Check whether or not we actually got eight eights back
-        if buf != [8;8] {
-            return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
-        }
-
-        // Ok, its time to tell our peer a little bit about ourselves
-        // a
+        // We begin by either getting or rebinding the socket if the socket was
+        // no longer bound
+        self.autobind()?;
         
-        // We now set the original timeouts back
-        self.socket.set_read_timeout(old_read_timeout).unwrap();
-        self.socket.set_write_timeout(old_write_timeout).unwrap();
+        // Ensure that the socket is bound.
+        if let Some(socket) = &self.socket {
+            // Before we begin, we set the block time for read and write operations to one second
+            // long. We don't want to wait too long for our peer to respond, and we will give up
+            // if things take too long. We also save the original timeouts to write them back.
+            let second = Duration::new(1,0);
+            let old_read_timeout = socket.read_timeout().unwrap();
+            let old_write_timeout = socket.write_timeout().unwrap();
 
-        return Ok(());
+            socket.set_read_timeout(Some(second)).unwrap();
+            socket.set_write_timeout(Some(second)).unwrap();
+
+            // We first attempt to connect to our target peer
+            match socket.connect(target.addr.unwrap()) {
+                Ok(_) => (),
+                Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
+            }
+
+            // We then send our mating message inviting to bind, telling nothing about ourselves
+            // it looks very simple: 0 0 0 0 0 0 0, just 8 zeros
+            socket.send(&[0;8]).unwrap(); 
+
+            // We now hope that we get an acknowledge message back, that would be good so we could
+            // introduce ourselves. The ack mesage is eight eights: 8 8 8 8 8 8 8 8
+            let mut buf = [0;8]; // initialize a buffer of 8 zeros
+            socket.recv(&mut buf).unwrap();
+
+            // Check whether or not we actually got eight eights back
+            if buf != [8;8] {
+                return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
+            }
+
+            // Ok, its time to tell our peer a little bit about ourselves
+            
+            // We now set the original timeouts back
+            socket.set_read_timeout(old_read_timeout).unwrap();
+            socket.set_write_timeout(old_write_timeout).unwrap();
+
+            return Ok(());
+        } else {
+            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+        }
     }
 }
 
