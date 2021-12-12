@@ -86,23 +86,13 @@ impl AgentDescription {
     pub fn deserialize(v:&[u8]) -> Self {
         bincode::deserialize(v).unwrap()
     }
-
-    /// Compares two agents and ensures that they are "the same" 
-    ///
-    /// similarity is determined by same name and same key
-    ///
-    /// # Returns
-    /// `bool`: whether agents are the same
-    pub fn is_same(&self, other:Self) -> bool {
-        self.key == other.key && self.name == other.name
-    }
 }
 
 impl PartialEq for AgentDescription {
+    // similarity is determined by same name and same key
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key &&
-            self.name == other.name &&
-            self.addr == other.addr
+        self.name == other.name 
     }
 }
 
@@ -112,11 +102,21 @@ impl Eq for AgentDescription {}
 // be a function
 fn noneifier() -> Option<UdpSocket> { None }
 
+#[derive(Debug)]
+pub enum AgentState {
+    Listening,
+    Standby
+}
+fn standby() -> AgentState { AgentState::Standby }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Agent {
     pub profile: AgentDescription,
     peers: Vec<AgentDescription>,
     secret: RsaPrivateKey,
+
+    #[serde(skip, default="standby")] 
+    state: AgentState,
 
     #[serde(skip, default="noneifier")] 
     socket: Option<UdpSocket>,
@@ -132,7 +132,12 @@ impl Agent {
 
         let socket = UdpSocket::bind(profile.addr.expect("fatal: agent-created desc. does not have address"));
         match socket {
-            Ok(s) => Ok(Agent { profile, peers: vec![], socket:Some(s), secret:priv_key}),
+            Ok(s) => Ok(Agent { profile,
+                                peers: vec![],
+                                socket:Some(s),
+                                secret:priv_key,
+                                state: AgentState::Standby }),
+
             Err(_) => Err(MitteError::AgentCreationError(String::from("cannot bind to socket")))
         }
     }
@@ -216,6 +221,30 @@ impl Agent {
             }
 
             // We then check that the ack has not been rejected 
+            if buf[1] == 0 {
+                return Err(MitteError::HandshakeError(String::from("handshake rejected")));
+            }
+
+            // We then check whether it is a new connection
+            // if so, we ensure that we have not seen the peer before + add them
+            // if not, we ensure that we have + update them
+            if buf[2] == 1 && !self.peers.contains(target) {
+                // new connection
+                self.peers.push(target.clone());
+            } else if buf[2] == 0 && self.peers.contains(target) {
+                // these next two lines may seem real silly, but
+                // the point is that PartialEq on `AgentDescription`
+                // is defined such that there is actually
+                let mut vec_filtered = self.peers.clone()
+                    .into_iter()
+                    .filter(|v| v != target)
+                    .collect::<Vec<AgentDescription>>();
+                vec_filtered.push(target.clone());
+
+            } else {
+                // return an error if they claim we've met before but we've not
+                return Err(MitteError::HandshakeError(String::from("handshake connection malformed")));
+            }
 
             // We now set the original timeouts back
             socket.set_read_timeout(old_read_timeout).unwrap();
