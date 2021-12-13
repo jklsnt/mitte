@@ -140,6 +140,13 @@ impl Agent {
         } else { Ok(()) }
     }
 
+    /// Attempts to handshake a target peer.
+    ///
+    /// # Arguments
+    /// - `target:&AgentDescription`: the AgentDescription of your target peer
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn handshake(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
         // The handshake subrutine is a very long subroutine therefore, we shall attempt to
         // illustrate parts of it.
