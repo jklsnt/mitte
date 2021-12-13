@@ -316,27 +316,49 @@ impl Agent {
 
     }
 
-    pub fn send_message(&mut self, msg: &[u8], name: String) -> Result<(), MitteError> {
+    pub fn send_message(&mut self, msg: &[u8], peer_name: &str) -> Result<(), MitteError> {
+        // We first establish a random number source
         let mut rng = OsRng;
+
+        // We then check that our UDP port is bound
         self.autobind()?;
 
-        if msg.len() > 100 {
+        // If the message length is larger than 512 units, we consider it too long
+        if msg.len() > 512 {
             return Err(MitteError::SendError(String::from("message too long")));
         }
 
-        if let Some(peer) = self.peers.iter().filter(|r| r.name == name).next() {
+        // We then match the correct peer to communicate with
+        if let Some(peer) = self.peers.iter().filter(|r| r.name == peer_name).next() {
+
+            // We also make sure that the socket is bound
             if let Some(socket) = &self.socket {
+
+                // If connection with the peer was not successful, we error
                 if let Err(_) = socket.connect(peer.addr.unwrap()) {
                     return Err(MitteError::HandshakeError(String::from("peer disconnected"))); 
                 }
 
+                // We then encode the data as needed
                 let padding = PaddingScheme::new_pkcs1v15_encrypt();
-                //let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
+                let enc_data:Vec<u8> = peer.key.encrypt(&mut rng, padding, msg).unwrap();
 
-                let enc_data:Vec<u8> = peer.key.encrypt(&mut rng, padding, &msg[..]).unwrap();
-                //enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
+                // Finally, we add establishment values 0 0 + length of the communication
+                // this implementation of UDP only sends `u8`s, so we split the length up
+                // into two u8s
+                let data_len = enc_data.len() as u16;
+                let (a,b) = ((data_len >> 8) as u8, data_len as u8);
 
-                socket.send(&enc_data).unwrap();
+                let chained_data = [0,0,a,b] 
+                    .iter()
+                    .chain(enc_data.iter())
+                    .cloned()
+                    .collect::<Vec<u8>>();
+
+                println!("len: {:?}, tx: {:?}", enc_data.len(), enc_data);
+
+                // Send it along!
+                socket.send(&chained_data).unwrap();
                 return Ok(());
             } else {
                 return Err(MitteError::HandshakeError(String::from("socket unbound")));
@@ -350,13 +372,32 @@ impl Agent {
         self.autobind()?;
 
         if let Some(socket) = &self.socket {
-            let mut buf = [0;100]; // TODO: len checks!
+            // We first recieve a message
+            let mut buf = [0;1024]; // TODO: len checks!
             socket.recv(&mut buf).unwrap();
 
-            let padding = PaddingScheme::new_pkcs1v15_encrypt();
-            let dec_data = self.secret.decrypt(padding, &buf).expect("failed to decrypt");
+            // We then check that the setup values are correct
+            if buf[0] != buf[1] || buf[1] != 0 {
+                return Err(MitteError::HandshakeError(String::from("incorrect setup values")));
+            }
 
-            return Ok(dec_data);
+            // We then get the appropriate length for our data by bitshifting
+            // it back (i.e. constructing a `u16` out of two `u8` because
+            // UDP can't send `u16`s
+
+            let len = ((buf[2] as u16) << 8 + buf[3]) as usize;
+
+            println!("len: {:?}, rx: {:?}", len, &buf[4..len+4]);
+
+            // We use typical decoding schemes to decode it
+            let padding = PaddingScheme::new_pkcs1v15_encrypt();
+            match self.secret.decrypt(padding, &buf[4..len+4]) {
+                Ok(d) => { Ok(d) },
+                Err(e) => {
+                    println!("{:?}", e);
+                    return Err(MitteError::HandshakeError(String::from("socket unbound")));
+                }
+            }
 
         } else {
             return Err(MitteError::HandshakeError(String::from("socket unbound")));
