@@ -257,8 +257,7 @@ impl Agent {
         }
     }
 
-    pub fn listen(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
-
+    pub fn listen(&mut self) -> Result<(), MitteError> {
         // Beginning the autobind procidure as in the case with handshaking
         self.autobind()?;
 
@@ -272,20 +271,20 @@ impl Agent {
             socket.set_read_timeout(Some(second)).unwrap();
             socket.set_write_timeout(Some(second)).unwrap();
 
+            // We first by waiting to recieve a buffer of 8 zeros to align
             let mut buf = [1;8]; // initialize a buffer of 8 zeros
-            let (_, _) = socket.recv_from(&mut buf).unwrap();
+            let (_, sender) = socket.recv_from(&mut buf).unwrap();
 
+            // If we didn't get 8 zeros, give up. 
             if buf != [0;8] {
                 return Err(MitteError::ListenError(String::from("malformed input")));
             }
 
-            match socket.connect(target.addr.unwrap()) {
-                Ok(_) => (),
-                Err(_) => { return Err(MitteError::ListenError(String::from("cannot listen"))); }
-            }
+            // We send to our original sender the ack message and continue 
+            // to wait for their full description of themselves
+            socket.send_to(&[8;8], sender).unwrap();
 
-            socket.send(&[0;8]).unwrap();
-
+            // And now, we wait for the reciept of the 
             let mut peer_desc = [0;320];
             socket.recv(&mut peer_desc).unwrap();
             let peer = AgentDescription::deserialize(&peer_desc);
