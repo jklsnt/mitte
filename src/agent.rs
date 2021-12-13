@@ -9,7 +9,7 @@ use bincode;
 use serde::{Serialize, Deserialize};
 
 use rand::rngs::OsRng;
-use std::net::{UdpSocket, SocketAddrV4, SocketAddr};
+use std::net::{UdpSocket, SocketAddrV4};
 //use rsa::{RsaPublicKey, RsaPrivateKey};
 use rsa::{PublicKey, RsaPrivateKey, RsaPublicKey, PaddingScheme};
 
@@ -102,22 +102,11 @@ impl Eq for AgentDescription {}
 // be a function
 fn noneifier() -> Option<UdpSocket> { None }
 
-#[derive(Debug)]
-pub enum AgentState {
-    Listening,
-    Handshaking,
-    Standby
-}
-fn standby() -> AgentState { AgentState::Standby }
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Agent {
     pub profile: AgentDescription,
     peers: Vec<AgentDescription>,
     secret: RsaPrivateKey,
-
-    #[serde(skip, default="standby")] 
-    state: AgentState,
 
     #[serde(skip, default="noneifier")] 
     socket: Option<UdpSocket>,
@@ -136,8 +125,7 @@ impl Agent {
             Ok(s) => Ok(Agent { profile,
                                 peers: vec![],
                                 socket:Some(s),
-                                secret:priv_key,
-                                state: AgentState::Standby }),
+                                secret:priv_key}),
 
             Err(_) => Err(MitteError::AgentCreationError(String::from("cannot bind to socket")))
         }
@@ -257,13 +245,13 @@ impl Agent {
         }
     }
 
-    pub fn listen(&mut self) -> Result<(), MitteError> {
+    pub fn listen(&mut self, wait:u64) -> Result<(), MitteError> {
         // Beginning the autobind procidure as in the case with handshaking
         self.autobind()?;
 
         if let Some(socket) = &self.socket {
             // We start by setting the durations and clearing their timeouts
-            let second = Duration::new(1,0);
+            let second = Duration::new(wait,0);
             let old_read_timeout = socket.read_timeout().unwrap();
             let old_write_timeout = socket.write_timeout().unwrap();
 
@@ -283,27 +271,15 @@ impl Agent {
             // We send to our original sender the ack message and continue 
             // to wait for their full description of themselves
             socket.send_to(&[8;8], sender).unwrap();
-
+            
             // And now, we wait for the reciept of the description of our peer
             let mut peer_desc = [0;320];
-            socket.recv(&mut peer_desc).unwrap();
+            socket.recv_from(&mut peer_desc).unwrap();
             let peer = AgentDescription::deserialize(&peer_desc);
 
             // Make sure that our peer actually sent an address
             if let None = peer.addr {
                 return Err(MitteError::ListenError(String::from("peer did not send address")));
-            }
-
-            // We now verify that the agent that we are recieving
-            // from is the same agent that claims we got the info from.
-            //
-            // We also ensure that the `sender` address is a IPv4 address
-            if let SocketAddr::V4(addr) = sender {
-                if peer.addr.unwrap() != addr {
-                    return Err(MitteError::ListenError(String::from("address malformed")));
-                }
-            } else {
-                return Err(MitteError::ListenError(String::from("address malformed")));
             }
 
             // Check whether or not we have the peer in the peers list
@@ -325,7 +301,7 @@ impl Agent {
 
             // We finally acknowledge the final sent message and be done
             let buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
-            socket.send(&buf).unwrap();
+            socket.send_to(&buf, sender).unwrap();
 
             // We now set the original timeouts back
             socket.set_read_timeout(old_read_timeout).unwrap();
