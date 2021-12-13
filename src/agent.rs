@@ -10,8 +10,8 @@ use serde::{Serialize, Deserialize};
 
 use rand::rngs::OsRng;
 use std::net::{UdpSocket, SocketAddrV4};
-use rsa::{RsaPublicKey, RsaPrivateKey};
-
+//use rsa::{RsaPublicKey, RsaPrivateKey};
+use rsa::{PublicKey, RsaPrivateKey, RsaPublicKey, PaddingScheme};
 
 /// A description for a given agent, including its name and address
 ///
@@ -266,7 +266,7 @@ impl Agent {
                 is_new = 0;
             }
 
-            let mut buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
+            let buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
             socket.send(&buf).unwrap();
 
             return Ok(());
@@ -275,6 +275,46 @@ impl Agent {
             return Err(MitteError::HandshakeError(String::from("socket unbound")));
         }
 
+    }
+
+
+
+    //let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+    //let public_key = RsaPublicKey::from(&private_key);
+
+
+    pub fn send_message(&mut self, msg: &[u8], name: String) -> Result<(), MitteError> {
+        let mut rng = OsRng;
+        self.autobind()?;
+
+        let mut target_idx; // something wrong here! 
+        match self.peers.iter().position(|r| r.name ==  name) {
+            Some(v) => { target_idx = v; },
+            None => { return Err(MitteError::HandshakeError(String::from("name is not in peers list"))); }
+        }
+
+        let peer_pub_key = &self.peers[target_idx].key;
+
+
+        if let Some(socket) = &self.socket {
+            match socket.connect(&self.peers[target_idx].addr.unwrap()) {
+                Ok(_) => (),
+                Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
+            }
+
+            // encrypt the message
+
+            //let padding = PaddingScheme::new_oaep::<sha2::Sha256>();
+            let padding = PaddingScheme::new_pkcs1v15_encrypt();
+            let enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
+            //let enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
+
+
+            socket.send(&enc_data).unwrap();
+            return Ok(());
+        } else {
+            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+        }
     }
 }
 
