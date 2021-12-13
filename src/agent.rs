@@ -305,6 +305,15 @@ impl Agent {
 
     }
 
+    /// Sends a message to a target peer. 
+    ///
+    /// # Arguments
+    /// - `msg:&[u8]`: the message you want to send, in the form of an arr of u8s
+    /// - `peer_name:&str`: the name of the peer you want to send a message to. Handshake must
+    /// already be completed
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn send_message(&mut self, msg: &[u8], peer_name: &str) -> Result<(), MitteError> {
         // We first establish a random number source
         let mut rng = OsRng;
@@ -356,6 +365,11 @@ impl Agent {
         }
     }
 
+    /// Receives a single message. After receiving a message, the message is returned and the
+    /// function quits.
+    ///
+    /// # Returns
+    /// `Result<<Vec<u8>, MitteError>`: potentially the received, decrypted message
     pub fn recv_message(&mut self) -> Result<Vec<u8>, MitteError> {
         self.autobind()?;
 
