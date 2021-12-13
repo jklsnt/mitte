@@ -9,7 +9,7 @@ use bincode;
 use serde::{Serialize, Deserialize};
 
 use rand::rngs::OsRng;
-use std::net::{UdpSocket, SocketAddrV4};
+use std::net::{UdpSocket, SocketAddrV4, SocketAddr};
 //use rsa::{RsaPublicKey, RsaPrivateKey};
 use rsa::{PublicKey, RsaPrivateKey, RsaPublicKey, PaddingScheme};
 
@@ -284,18 +284,46 @@ impl Agent {
             // to wait for their full description of themselves
             socket.send_to(&[8;8], sender).unwrap();
 
-            // And now, we wait for the reciept of the 
+            // And now, we wait for the reciept of the description of our peer
             let mut peer_desc = [0;320];
             socket.recv(&mut peer_desc).unwrap();
             let peer = AgentDescription::deserialize(&peer_desc);
 
-            // 
+            // Make sure that our peer actually sent an address
+            if let None = peer.addr {
+                return Err(MitteError::ListenError(String::from("peer did not send address")));
+            }
 
+            // We now verify that the agent that we are recieving
+            // from is the same agent that claims we got the info from.
+            //
+            // We also ensure that the `sender` address is a IPv4 address
+            if let SocketAddr::V4(addr) = sender {
+                if peer.addr.unwrap() != addr {
+                    return Err(MitteError::ListenError(String::from("address malformed")));
+                }
+            } else {
+                return Err(MitteError::ListenError(String::from("address malformed")));
+            }
+
+            // Check whether or not we have the peer in the peers list
+            // if we do, swap out the peer with the one that we got
+            // so that we could update the address if needed (i.e. if we
+            // have a peer 
             let mut is_new = 1;
             if self.peers.contains(&peer) {
                 is_new = 0;
+                let mut vec_filtered = self.peers.clone()
+                    .into_iter()
+                    .filter(|v| v != &peer)
+                    .collect::<Vec<AgentDescription>>();
+                vec_filtered.push(peer.clone());
+                self.peers = vec_filtered;
+            } else {
+                self.peers.push(peer.clone())
             }
 
+            // We finally acknowledge the final sent message and be done
             let buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
             socket.send(&buf).unwrap();
 
