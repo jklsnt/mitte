@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["mitte"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.57.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"mitte/error/enum.MitteError.html\" title=\"enum mitte::error::MitteError\">MitteError</a>","synthetic":false,"types":["mitte::error::MitteError"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
