@@ -289,6 +289,8 @@ impl Agent {
             socket.recv(&mut peer_desc).unwrap();
             let peer = AgentDescription::deserialize(&peer_desc);
 
+            // 
+
             let mut is_new = 1;
             if self.peers.contains(&peer) {
                 is_new = 0;
@@ -309,48 +311,29 @@ impl Agent {
 
     }
 
-
-
-    //let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-    //let public_key = RsaPublicKey::from(&private_key);
-
-
     pub fn send_message(&mut self, msg: &[u8], name: String) -> Result<(), MitteError> {
         let mut rng = OsRng;
         self.autobind()?;
 
-        let mut target_idx; // something wrong here! 
-        match self.peers.iter().position(|r| r.name ==  name) {
-            Some(v) => { target_idx = v; },
-            None => { return Err(MitteError::HandshakeError(String::from("name is not in peers list"))); }
-        }
+        if let Some(peer) = self.peers.iter().filter(|r| r.name == name).next() {
+            if let Some(socket) = &self.socket {
+                if let Err(_) = socket.connect(peer.addr.unwrap()) {
+                    return Err(MitteError::HandshakeError(String::from("peer disconnected"))); 
+                }
 
-        let peer_pub_key = &self.peers[target_idx].key;
+                let padding = PaddingScheme::new_pkcs1v15_encrypt();
+                let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
 
+                let mut enc_data:Vec<u8> = peer.key.encrypt(&mut rng, padding, &msg[..]).unwrap();
+                enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
 
-        if let Some(socket) = &self.socket {
-            match socket.connect(&self.peers[target_idx].addr.unwrap()) {
-                Ok(_) => (),
-                Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
+                socket.send(&enc_data).unwrap();
+                return Ok(());
+            } else {
+                return Err(MitteError::HandshakeError(String::from("socket unbound")));
             }
-
-            // encrypt the message
-
-            //let padding = PaddingScheme::new_oaep::<sha2::Sha256>();
-            //
-            let padding = PaddingScheme::new_pkcs1v15_encrypt();
-            let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
-
-            let mut enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
-            enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
-
-            //let enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
-
-
-            socket.send(&enc_data).unwrap();
-            return Ok(());
         } else {
-            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+            return Err(MitteError::HandshakeError(String::from("name is not in peers list"))); 
         }
     }
 }
