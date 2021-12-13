@@ -305,8 +305,13 @@ impl Agent {
             // encrypt the message
 
             //let padding = PaddingScheme::new_oaep::<sha2::Sha256>();
+            //
             let padding = PaddingScheme::new_pkcs1v15_encrypt();
-            let enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
+            let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
+
+            let mut enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
+            enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
+
             //let enc_data = peer_pub_key.encrypt(&mut rng, padding, &msg[..]).expect("failed to encrypt");
 
 
