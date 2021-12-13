@@ -7,7 +7,8 @@ use std::fmt;
 pub enum MitteError  {
     DescriptionFormatError(String),
     AgentCreationError(String),
-    HandshakeError(String)
+    HandshakeError(String),
+    ListenError(String)
 }
 
 impl fmt::Display for MitteError {
