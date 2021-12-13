@@ -150,6 +150,13 @@ impl Agent {
         } else { Ok(()) }
     }
 
+    /// Attempts to handshake a target peer.
+    ///
+    /// # Arguments
+    /// - `target:&AgentDescription`: the AgentDescription of your target peer
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn handshake(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
         // The handshake subrutine is a very long subroutine therefore, we shall attempt to
         // illustrate parts of it.
@@ -245,6 +252,14 @@ impl Agent {
         }
     }
 
+    /// Listen for another peers handshake, and if received, completes the handshake and updates
+    /// peer list
+    ///
+    /// # Arguments
+    /// - `wait:u64`: the amount of time in seconds to wait before quitting
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn listen(&mut self, wait:u64) -> Result<(), MitteError> {
         // Beginning the autobind procidure as in the case with handshaking
         self.autobind()?;
@@ -271,7 +286,7 @@ impl Agent {
             // We send to our original sender the ack message and continue 
             // to wait for their full description of themselves
             socket.send_to(&[8;8], sender).unwrap();
-            
+
             // And now, we wait for the reciept of the description of our peer
             let mut peer_desc = [0;320];
             socket.recv_from(&mut peer_desc).unwrap();
@@ -315,6 +330,15 @@ impl Agent {
 
     }
 
+    /// Sends a message to a target peer.
+    ///
+    /// # Arguments
+    /// - `msg:&[u8]`: the message you want to send, in the form of an arr of u8s
+    /// - `peer_name:&str`: the name of the peer you want to send a message to. Handshake must
+    /// already be completed
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn send_message(&mut self, msg: &[u8], peer_name: &str) -> Result<(), MitteError> {
         // We first establish a random number source
         let mut rng = OsRng;
@@ -366,6 +390,11 @@ impl Agent {
         }
     }
 
+    /// Receives a single message. After receiving a message, the message is returned and the
+    /// function quits.
+    ///
+    /// # Returns
+    /// `Result<<Vec<u8>, MitteError>`: potentially the received, decrypted message
     pub fn recv_message(&mut self) -> Result<Vec<u8>, MitteError> {
         self.autobind()?;
 
