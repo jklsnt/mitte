@@ -14,17 +14,6 @@ use std::net::{UdpSocket, SocketAddrV4};
 use rsa::{PublicKey, RsaPrivateKey, RsaPublicKey, PaddingScheme};
 
 /// A description for a given agent, including its name and address
-///
-/// # Examples
-///
-/// ```
-/// use std::net::{SocketAddrV4, Ipv4Addr}
-///
-/// let socket = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8080);
-/// let name = String::from("A Friend"); 
-///
-/// let desc = AgentDescription {addr: socket, name}
-/// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AgentDescription {
     addr: Option<SocketAddrV4>,
@@ -336,7 +325,7 @@ impl Agent {
 
                 // If connection with the peer was not successful, we error
                 if let Err(_) = socket.connect(peer.addr.unwrap()) {
-                    return Err(MitteError::HandshakeError(String::from("peer disconnected"))); 
+                    return Err(MitteError::SendError(String::from("peer disconnected"))); 
                 }
 
                 // We then encode the data as needed
@@ -349,22 +338,21 @@ impl Agent {
                 let data_len = enc_data.len() as u16;
                 let (a,b) = ((data_len >> 8) as u8, data_len as u8);
 
+                // We chunck the start digits + the bitshifted leng along
                 let chained_data = [0,0,a,b] 
                     .iter()
                     .chain(enc_data.iter())
                     .cloned()
                     .collect::<Vec<u8>>();
 
-                println!("len: {:?}, tx: {:?}", enc_data.len(), enc_data);
-
                 // Send it along!
                 socket.send(&chained_data).unwrap();
                 return Ok(());
             } else {
-                return Err(MitteError::HandshakeError(String::from("socket unbound")));
+                return Err(MitteError::SendError(String::from("socket unbound")));
             }
         } else {
-            return Err(MitteError::HandshakeError(String::from("name is not in peers list"))); 
+            return Err(MitteError::SendError(String::from("name is not in peers list"))); 
         }
     }
 
@@ -378,7 +366,7 @@ impl Agent {
 
             // We then check that the setup values are correct
             if buf[0] != buf[1] || buf[1] != 0 {
-                return Err(MitteError::HandshakeError(String::from("incorrect setup values")));
+                return Err(MitteError::ReceiveError(String::from("incorrect setup values")));
             }
 
             // We then get the appropriate length for our data by bitshifting
@@ -387,20 +375,17 @@ impl Agent {
 
             let len = ((buf[2] as u16) << 8 + buf[3]) as usize;
 
-            println!("len: {:?}, rx: {:?}", len, &buf[4..len+4]);
-
             // We use typical decoding schemes to decode it
             let padding = PaddingScheme::new_pkcs1v15_encrypt();
             match self.secret.decrypt(padding, &buf[4..len+4]) {
                 Ok(d) => { Ok(d) },
-                Err(e) => {
-                    println!("{:?}", e);
-                    return Err(MitteError::HandshakeError(String::from("socket unbound")));
+                Err(_) => {
+                    return Err(MitteError::ReceiveError(String::from("decryption error")));
                 }
             }
 
         } else {
-            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+            return Err(MitteError::ReceiveError(String::from("socket unbound")));
         }
     }
 }
