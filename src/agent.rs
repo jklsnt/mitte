@@ -79,7 +79,7 @@ impl AgentDescription {
 }
 
 impl PartialEq for AgentDescription {
-    // similarity is determined by same name and same key
+    /// Partial equality is determined by only name + key being equal
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key &&
         self.name == other.name 
@@ -92,6 +92,7 @@ impl Eq for AgentDescription {}
 // be a function
 fn noneifier() -> Option<UdpSocket> { None }
 
+/// An agent with facities to connect, bind, and communication facilites
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Agent {
     pub profile: AgentDescription,
@@ -103,6 +104,15 @@ pub struct Agent {
 }
 
 impl Agent {
+
+    /// Creates a new agent and binds to the address specified
+    ///
+    /// # Arguments
+    /// - `addr:&str`: the port which you wish to be bound with 
+    /// - `name:&str`: the name/identifier of the agent
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: nothing, or a failure
     pub fn new(addr:&str, name: &str) -> Result<Self, MitteError> {
         let priv_key = if let Ok(k) = RsaPrivateKey::new(&mut OsRng, 2048) { k }
         else {return Err(MitteError::AgentCreationError(String::from("cannot create key")))};
