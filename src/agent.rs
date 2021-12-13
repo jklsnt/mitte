@@ -235,6 +235,14 @@ impl Agent {
         }
     }
 
+    /// Listen for another peers handshake, and if received, completes the handshake and updates
+    /// peer list
+    ///
+    /// # Arguments
+    /// - `wait:u64`: the amount of time in seconds to wait before quitting
+    ///
+    /// # Returns
+    /// `Result<(), MitteError>`: null, or an error
     pub fn listen(&mut self, wait:u64) -> Result<(), MitteError> {
         // Beginning the autobind procidure as in the case with handshaking
         self.autobind()?;
@@ -261,7 +269,7 @@ impl Agent {
             // We send to our original sender the ack message and continue 
             // to wait for their full description of themselves
             socket.send_to(&[8;8], sender).unwrap();
-            
+
             // And now, we wait for the reciept of the description of our peer
             let mut peer_desc = [0;320];
             socket.recv_from(&mut peer_desc).unwrap();
@@ -305,7 +313,7 @@ impl Agent {
 
     }
 
-    /// Sends a message to a target peer. 
+    /// Sends a message to a target peer.
     ///
     /// # Arguments
     /// - `msg:&[u8]`: the message you want to send, in the form of an arr of u8s
