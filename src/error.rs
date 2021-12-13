@@ -8,7 +8,9 @@ pub enum MitteError  {
     DescriptionFormatError(String),
     AgentCreationError(String),
     HandshakeError(String),
-    ListenError(String)
+    ListenError(String),
+    SendError(String),
+    ReceiveError(String),
 }
 
 impl fmt::Display for MitteError {

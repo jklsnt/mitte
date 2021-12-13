@@ -320,6 +320,10 @@ impl Agent {
         let mut rng = OsRng;
         self.autobind()?;
 
+        if msg.len() > 100 {
+            return Err(MitteError::SendError(String::from("message too long")));
+        }
+
         if let Some(peer) = self.peers.iter().filter(|r| r.name == name).next() {
             if let Some(socket) = &self.socket {
                 if let Err(_) = socket.connect(peer.addr.unwrap()) {
@@ -342,22 +346,15 @@ impl Agent {
         }
     }
 
-    pub fn recv_single(&mut self) -> Result<Vec<u8>, MitteError> {
+    pub fn recv_message(&mut self) -> Result<Vec<u8>, MitteError> {
         self.autobind()?;
 
         if let Some(socket) = &self.socket {
-
-            let mut buf = [0;10]; // TODO: len checks!
+            let mut buf = [0;100]; // TODO: len checks!
             socket.recv(&mut buf).unwrap();
 
             let padding = PaddingScheme::new_pkcs1v15_encrypt();
-            //let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
-
-            //RsaPublicKey::verify(&buf,
-
             let dec_data = self.secret.decrypt(padding, &buf).expect("failed to decrypt");
-
-
 
             return Ok(dec_data);
 
