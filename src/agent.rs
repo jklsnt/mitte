@@ -105,6 +105,7 @@ fn noneifier() -> Option<UdpSocket> { None }
 #[derive(Debug)]
 pub enum AgentState {
     Listening,
+    Handshaking,
     Standby
 }
 fn standby() -> AgentState { AgentState::Standby }
@@ -240,7 +241,7 @@ impl Agent {
                     .filter(|v| v != target)
                     .collect::<Vec<AgentDescription>>();
                 vec_filtered.push(target.clone());
-
+                self.peers = vec_filtered;
             } else {
                 // return an error if they claim we've met before but we've not
                 return Err(MitteError::HandshakeError(String::from("handshake connection malformed")));
@@ -257,31 +258,30 @@ impl Agent {
     }
 
     pub fn listen(&mut self, target: &AgentDescription) -> Result<(), MitteError> {
-        self.autobind()?;
-        if let Some(socket) = &self.socket {
 
+        // Beginning the autobind procidure as in the case with handshaking
+        self.autobind()?;
+
+        if let Some(socket) = &self.socket {
+            // We start by setting the durations and clearing their timeouts
             let second = Duration::new(1,0);
             let old_read_timeout = socket.read_timeout().unwrap();
             let old_write_timeout = socket.write_timeout().unwrap();
 
+            // And set the timeouts as usually
             socket.set_read_timeout(Some(second)).unwrap();
             socket.set_write_timeout(Some(second)).unwrap();
 
-            //match socket.connect(target.addr.unwrap()) {
-            //    Ok(_) => (),
-            //    Err(_) => { return Err(MitteError::HandshakeError(String::from("peer disconnected"))); }
-            //}
-
             let mut buf = [1;8]; // initialize a buffer of 8 zeros
-            socket.recv_from(&mut buf).unwrap();
+            let (_, _) = socket.recv_from(&mut buf).unwrap();
 
             if buf != [0;8] {
-                return Err(MitteError::HandshakeError(String::from("handshake unacknowledged")));
+                return Err(MitteError::ListenError(String::from("malformed input")));
             }
 
             match socket.connect(target.addr.unwrap()) {
                 Ok(_) => (),
-                Err(_) => { return Err(MitteError::HandshakeError(String::from("cannot listen"))); }
+                Err(_) => { return Err(MitteError::ListenError(String::from("cannot listen"))); }
             }
 
             socket.send(&[0;8]).unwrap();
@@ -295,36 +295,19 @@ impl Agent {
                 is_new = 0;
             }
 
-            let mut buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
+            let buf = [1, 1, is_new, 1]; // initialize a buffer of 4 zeros
             socket.send(&buf).unwrap();
+
+            // We now set the original timeouts back
+            socket.set_read_timeout(old_read_timeout).unwrap();
+            socket.set_write_timeout(old_write_timeout).unwrap();
 
             return Ok(());
 
         } else {
-            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+            return Err(MitteError::ListenError(String::from("socket unbound")));
         }
 
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
