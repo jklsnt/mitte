@@ -32,6 +32,7 @@ pub struct AgentDescription {
     pub name: String,
 }
 
+
 impl AgentDescription {
 
     /// Creates an agent. The agent's name must be smaller than or equal to 20 chars.
@@ -326,10 +327,10 @@ impl Agent {
                 }
 
                 let padding = PaddingScheme::new_pkcs1v15_encrypt();
-                let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
+                //let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
 
-                let mut enc_data:Vec<u8> = peer.key.encrypt(&mut rng, padding, &msg[..]).unwrap();
-                enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
+                let enc_data:Vec<u8> = peer.key.encrypt(&mut rng, padding, &msg[..]).unwrap();
+                //enc_data = RsaPrivateKey::sign(&self.secret, padding2, &enc_data).unwrap();
 
                 socket.send(&enc_data).unwrap();
                 return Ok(());
@@ -340,5 +341,52 @@ impl Agent {
             return Err(MitteError::HandshakeError(String::from("name is not in peers list"))); 
         }
     }
+
+    pub fn recv_single(&mut self) -> Result<Vec<u8>, MitteError> {
+        self.autobind()?;
+
+        if let Some(socket) = &self.socket {
+
+            let mut buf = [0;10]; // TODO: len checks!
+            socket.recv(&mut buf).unwrap();
+
+            let padding = PaddingScheme::new_pkcs1v15_encrypt();
+            //let padding2 = PaddingScheme::new_pkcs1v15_encrypt();
+
+            //RsaPublicKey::verify(&buf,
+
+            let dec_data = self.secret.decrypt(padding, &buf).expect("failed to decrypt");
+
+
+
+            return Ok(dec_data);
+
+        } else {
+            return Err(MitteError::HandshakeError(String::from("socket unbound")));
+        }
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
