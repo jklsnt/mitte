@@ -36,3 +36,8 @@ This project elected to utilize a simple RSA asynchronous-key exchange in favour
 *** UDP and the Handshaking Mechanism
 The handshaking protocol is actively driven by the sending party and passively received by the receiving party. The "open protocol" design allows multiple parties to connect spontaneously without any prior sense of introduction. This again reduces the overhead of peer-to-peer connection, while the public-key exchange allows binding one client to one party. Therefore, spontaneous transfers could take place without the need for another rebinding process and the subsequent overhead which that could cause.
 
+** Next Steps
+A standard toolkit from which any peers could communicate effortlessly. Though the reasonably ergonomic public API, a product that allows the rapid exchange of secure information (such as a clipboard) could be built with a solid backend mechanism security. We hope to explore this as part of an extension to this project.
+
+Furthermore, due to the `mitte` crate being copiously documented and its APIs exposed, other members of the OSS community could leverage this library to create other products that needs a solid backbone of peer-to-peer secure UDP connection.
+
