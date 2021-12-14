@@ -1,8 +1,9 @@
 //! mitte
+//!
 //! Facilities for UDP-based secure message transfer.
 //!
-//! (c) 2021 Houjun Liu and Huxley Marvit
-//! submitted as the final project to CS240
+//! (c) 2021 Houjun Liu and Huxley Marvit.
+//! Submitted as the final project to CS240
 
 // Error handling
 pub mod error;

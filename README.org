@@ -1,0 +1,38 @@
+* Mitte
+Facilities for creating a secured connection between multiple peers.
+
+** Motivation
+The process of UDP socket connection is pretty technically simple, though UDP connections are generically quite insecure. At the same time, systems already exist to make RSA key exchanges pretty efficient. This Rust library attempts to simplify the process to establish multi-peer communication between various connected UDP sockets. 
+
+** Typical Usage 
+#+begin_src rust
+use mitte::{Agent, AgentDescription}
+
+// Computer 1
+let peer1 = Agent::new("0.0.0.0:8081", "TestAgent1");
+let peer1_desc = peer1.profile;
+let peer1_desc_serialized = peer1.profile.serialize();
+
+peer1.listen()
+
+// Computer 2
+let peer2 = Agent::new("0.0.0.0:8082", "TestAgent2");
+let peer2_desc = peer2.profile;
+let peer2_desc_serialized = peer2.profile.serialize();
+
+peer2.handshake(peer1_desc);
+
+// Talk!
+let result = peer1.recv_message()
+let data = [1,2,3,4,5,6,5,4,3];
+peer2.send_message(&data, "TestAgent1");
+#+end_src
+
+** Design Decisions
+
+*** Async Key Exchange
+This project elected to utilize a simple RSA asynchronous-key exchange in favour of an Diffe-Helman key exchange scheme. As, per the design spec, the initial exchange of keys are either done publicly or sent directly with a separate protocol of communication, there is no need to again setup a synchronous key exchange as a part of an already securely-asynchronous. Furthermore, this public-introduction mechanism reduced friction of introduction.
+
+*** UDP and the Handshaking Mechanism
+The handshaking protocol is actively driven by the sending party and passively received by the receiving party. The "open protocol" design allows multiple parties to connect spontaneously without any prior sense of introduction. This again reduces the overhead of peer-to-peer connection, while the public-key exchange allows binding one client to one party. Therefore, spontaneous transfers could take place without difficulty.
+
